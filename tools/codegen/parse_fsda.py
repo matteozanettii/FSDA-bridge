@@ -26,53 +26,33 @@ def parse_json_signatures(json_path: Path) -> dict:
     Returns all signatures grouped by function name. Keys starting
     with _ are excluded. See Spec 023.
     """
-    """Parse a single functionSignatures.json, preserving duplicate keys.
-
-    Returns all signatures grouped by function name. Keys starting
-    with _ are excluded. See Spec 023.
-    """
-    
-    # guard clause: double key 
     def multikeys_hook(pairs):
         d = {}
+        # Track keys that we have explicitly converted into a list of duplicates
+        dupes = set()
+        
         for k, v in pairs:
             if k in d:
-                # If the key already exists, we convert the value to a list and append the new value
-                if isinstance(d[k], list):
+                # If we already marked this key as a duplicate, just append
+                if k in dupes:
                     d[k].append(v)
+                # Otherwise, wrap the existing value and the new one in a new list
                 else:
                     d[k] = [d[k], v]
+                    dupes.add(k)
             else:
                 d[k] = v
         return d
 
-    # Read the JSON file and parse it with the custom hook
     with open(json_path, 'r', encoding='utf-8') as f:
         raw_data = json.loads(f.read(), object_pairs_hook=multikeys_hook)
 
-    final_signatures = {}
-    
-    for key, value in raw_data.items():
-        # excluding keys that start with an underscore
-        if key.startswith('_'):
-            continue
-        
-        # Ensure that the value is always a list, even if there's only one signature
-        signatures = value if isinstance(value, list) else [value]
-        
-        # Check for missing 'inputs' or 'description' in each signature
-        for sig in signatures:
-            if not isinstance(sig, dict):
-                continue
-            if 'inputs' not in sig:
-                logging.warning(f"[{json_path.name}] Function '{key}' is missing 'inputs'.")
-            if 'description' not in sig:
-                logging.warning(f"[{json_path.name}] Function '{key}' is missing 'description'.")
-
-        final_signatures[key] = signatures
-
-    return final_signatures
-    raise NotImplementedError
+    # Filter out system keys and normalize every function entry to a list
+    return {
+        key: (value if isinstance(value, list) else [value])
+        for key, value in raw_data.items()
+        if not key.startswith('_')
+    }
 
 
 def extract_m_prose(m_path: Path) -> dict:
